@@ -14,26 +14,33 @@ app = Flask(__name__)
 load_dotenv()
 
 PINECONE_API_KEY = os.environ.get('PINECONE_API_KEY')
-PINECONE_API_ENV = os.environ.get('PINECONE_API_ENV')
-
 
 embeddings = download_hugging_face_embeddings()
 
 #Initializing the Pinecone
-pinecone.init(api_key=PINECONE_API_KEY,
-              environment=PINECONE_API_ENV)
+from pinecone import Pinecone
 
-index_name="medical-bot"
+pc = Pinecone(api_key=PINECONE_API_KEY)
+
+index_name="medical-chatbot"
+
+# connect to index
+index = pc.Index(index_name)
 
 #Loading the index
-docsearch=Pinecone.from_existing_index(index_name, embeddings)
+from langchain.vectorstores import Pinecone
+
+vectorstore = Pinecone(
+    index=index, 
+    embedding=embeddings, 
+    text_key="text")
 
 
 PROMPT=PromptTemplate(template=prompt_template, input_variables=["context", "question"])
 
 chain_type_kwargs={"prompt": PROMPT}
 
-llm=CTransformers(model="model/llama-2-7b-chat.ggmlv3.q4_0.bin",
+llm=CTransformers(model="./model/llama-2-7b-chat.ggmlv3.q8_0.bin",
                   model_type="llama",
                   config={'max_new_tokens':512,
                           'temperature':0.8})
@@ -42,7 +49,7 @@ llm=CTransformers(model="model/llama-2-7b-chat.ggmlv3.q4_0.bin",
 qa=RetrievalQA.from_chain_type(
     llm=llm, 
     chain_type="stuff", 
-    retriever=docsearch.as_retriever(search_kwargs={'k': 2}),
+    retriever=vectorstore.as_retriever(search_kwargs={'k': 2}),
     return_source_documents=True, 
     chain_type_kwargs=chain_type_kwargs)
 
